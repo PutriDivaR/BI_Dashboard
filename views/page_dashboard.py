@@ -603,7 +603,8 @@ def render():
     """, unsafe_allow_html=True)
 
     # adjust column widths to balance layout (no scroll on left column)
-    ia, ib, ic = st.columns([0.95, 1.3, 1.05])
+
+    ia, ib, ic = st.columns([1.0, 1.25, 1.05])
 
     # ── Layanan Tambahan vs Churn (Per-service comparison) ──────────
     with ia:
