@@ -4,7 +4,11 @@ from sqlalchemy import create_engine, text
 MYSQL_BASE_URI = "mysql+pymysql://root:@localhost"
 DB_NAME = "bi_customer"
 MYSQL_URI = f"{MYSQL_BASE_URI}/{DB_NAME}"
-SQLITE_URI = "sqlite:///d:/Project/customer_churn_bi/database/bi_customer.db"
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+DB_DIR = os.path.join(ROOT_DIR, "database")
+SQLITE_DB_PATH = os.path.join(DB_DIR, "bi_customer.db")
+SQLITE_DB_PATH = SQLITE_DB_PATH.replace('\\', '/')
+SQLITE_URI = "sqlite:///" + SQLITE_DB_PATH
 
 engine = None
 db_type = "SQLite (Fallback)"
@@ -25,8 +29,7 @@ try:
     db_uri = MYSQL_URI
 except Exception as e:
     # Jika MySQL offline, gunakan SQLite lokal di folder database/
-    db_dir = "d:/Project/customer_churn_bi/database"
-    os.makedirs(db_dir, exist_ok=True)
+    os.makedirs(DB_DIR, exist_ok=True)
     engine = create_engine(SQLITE_URI)
     db_type = "SQLite (Fallback)"
     db_uri = SQLITE_URI

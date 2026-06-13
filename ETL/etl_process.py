@@ -3,6 +3,8 @@ import pandas as pd
 from sqlalchemy import text
 from database.database import engine, get_db_status
 
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+
 def init_tables(log_callback=None):
     """Membuat ulang tabel schema database jika diperlukan"""
     db_type, _ = get_db_status()
@@ -15,7 +17,7 @@ def init_tables(log_callback=None):
     log(f"Menginisialisasi skema tabel untuk database: {db_type}")
     
     if db_type == "MySQL":
-        sql_path = "d:/Project/customer_churn_bi/database/bi_customer.sql"
+        sql_path = os.path.join(ROOT_DIR, "database", "bi_customer.sql")
         if os.path.exists(sql_path):
             log("Membaca file skema bi_customer.sql untuk MySQL...")
             with open(sql_path, "r", encoding="utf-8") as f:
@@ -129,7 +131,7 @@ def run_etl(log_callback=None):
             print(msg)
             
     try:
-        csv_path = "d:/Project/customer_churn_bi/data/dataset_TelcoCustomerChurn.csv"
+        csv_path = os.path.join(ROOT_DIR, "data", "dataset_TelcoCustomerChurn.csv")
         log(f"1. Membaca dataset mentah dari: {csv_path}")
         if not os.path.exists(csv_path):
             raise FileNotFoundError(f"File data tidak ditemukan di: {csv_path}")
