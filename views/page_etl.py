@@ -315,7 +315,7 @@ def render():
             </div>""", unsafe_allow_html=True)
 
         if not is_ready:
-            if st.button("▶  Jalankan ETL Pipeline Sekarang", width="stretch"):
+            if st.button("▶  Jalankan ETL Pipeline Sekarang", key="run_etl_now"):
                 log_area = st.empty()
                 logs = []
 
@@ -346,7 +346,7 @@ def render():
                 st.markdown(
                     "<small style='color:#6C7A72'>Force-run enabled by environment variable.</small>",
                     unsafe_allow_html=True)
-                if st.button("▶  Jalankan ETL Pipeline (FORCE)", width="stretch"):
+                if st.button("▶  Jalankan ETL Pipeline (FORCE)", key="run_etl_force"):
                     log_area = st.empty()
                     logs = []
 
