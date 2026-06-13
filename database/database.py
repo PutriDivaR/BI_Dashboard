@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text  # type: ignore
 
 MYSQL_BASE_URI = "mysql+pymysql://root:@localhost"
 DB_NAME = "bi_customer"

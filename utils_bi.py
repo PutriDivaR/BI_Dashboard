@@ -1,7 +1,7 @@
 """utils.py – Utility functions and styling tokens for Churn BI."""
-import pandas as pd
-import streamlit as st
-from sqlalchemy import text
+import pandas as pd  # type: ignore
+import streamlit as st  # type: ignore
+from sqlalchemy import text  # type: ignore
 from database.database import engine, get_db_status
 
 # ==================================================
@@ -64,7 +64,13 @@ def load_bi_data() -> pd.DataFrame:
         dt.tenureBucket,
         dt.tenureCategory,
         ds.internetService,
-        ds.serviceCount
+        ds.serviceCount,
+        ds.onlineSecurity,
+        ds.onlineBackup,
+        ds.deviceProtection,
+        ds.techSupport,
+        ds.streamingTV,
+        ds.streamingMovies
     FROM fact_churn fc
     JOIN dim_customer dc ON fc.customer_id = dc.customer_id
     JOIN dim_contract dct ON fc.contract_id = dct.contract_id

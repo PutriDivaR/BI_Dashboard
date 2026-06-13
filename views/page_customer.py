@@ -1,9 +1,9 @@
 """page_customer.py – Halaman Customer Analysis."""
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-import streamlit as st
-from sqlalchemy import text
+import pandas as pd  # type: ignore
+import plotly.express as px  # type: ignore
+import plotly.graph_objects as go  # type: ignore
+import streamlit as st  # type: ignore
+from sqlalchemy import text  # type: ignore
 
 from database.database import engine
 from utils_bi import (

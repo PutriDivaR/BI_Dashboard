@@ -1,6 +1,6 @@
 import os
-import pandas as pd
-from sqlalchemy import text
+import pandas as pd  # type: ignore
+from sqlalchemy import text  # type: ignore
 from database.database import engine, get_db_status
 
 def init_tables(log_callback=None):

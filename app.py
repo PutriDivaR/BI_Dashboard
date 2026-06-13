@@ -1,6 +1,6 @@
 """app.py – Main entrypoint for Customer Churn BI application."""
-import streamlit as st
-from streamlit_option_menu import option_menu
+import streamlit as st  # type: ignore
+from streamlit_option_menu import option_menu  # type: ignore
 from database.database import get_db_status
 
 # Import modular pages from views directory

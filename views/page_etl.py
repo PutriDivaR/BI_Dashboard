@@ -1,8 +1,8 @@
 """page_etl.py – Halaman ETL & Data Quality Pipeline."""
-import pandas as pd
-import plotly.graph_objects as go
-import streamlit as st
-from sqlalchemy import text
+import pandas as pd  # type: ignore
+import plotly.graph_objects as go  # type: ignore
+import streamlit as st  # type: ignore
+from sqlalchemy import text  # type: ignore
 
 from database.database import engine, get_db_status
 from ETL.etl_process import run_etl
