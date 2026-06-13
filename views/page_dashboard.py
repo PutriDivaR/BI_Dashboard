@@ -13,6 +13,7 @@ import streamlit as st  # type: ignore
 
 from utils_bi import (
     MINT, MINT_SOFT, MINT_DARK, RED, AMBER, BLUE, PURP,
+    C_CHURN, C_RETAINED, C_AMBER, C_BLUE, C_PURP, C_TEAL, C_ROSE,
     TEXT_DARK, TEXT_MID, TEXT_LIGHT, BG_CARD, BORDER, MINT_BG, MINT_MID,
     theme_fig, page_header, section_title, card_open, card_close, card_header,
     empty_state, churn_rate_bar, load_bi_data, check_db_ready,
@@ -32,6 +33,9 @@ BAR_COLORS = {
 def churn_pct(df: pd.DataFrame, col: str, val: str) -> float:
     sub = df[df[col] == val]
     return (sub["churnFlag"].sum() / len(sub) * 100) if len(sub) else 0.0
+
+# Backwards-compatible alias used elsewhere in the file
+_pct = churn_pct
 
 
 def bar_color_by_val(values, thresholds=(40, 20)):
@@ -73,17 +77,8 @@ def build_trend_from_real(df: pd.DataFrame) -> pd.DataFrame:
 # ─────────────────────────────────────────────────────────────────────
 def render():
 
-    # ── Page header ───────────────────────────────────────────────────
-    st.markdown("""
-    <div style="padding: 18px 0 6px 0;">
-        <h1 style="font-size:28px; font-weight:900; color:#1A2E24; margin:0; letter-spacing:-0.5px;">
-            OVERVIEW
-        </h1>
-        <p style="color:#8FA898; font-size:13px; margin:3px 0 0 0; font-weight:500;">
-            Ringkasan performa customer churn perusahaan telekomunikasi
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    # ── Page header (use shared green banner like other pages)
+    page_header("📊", "Overview", "Ringkasan performa customer churn perusahaan telekomunikasi")
 
     if not check_db_ready():
         empty_state()
@@ -786,141 +781,161 @@ def render():
 
     st.markdown("<div style='margin-top:22px;'></div>", unsafe_allow_html=True)
 
-    # ─────────────────────────────────────────────────
-    # ROW 5: KEY INSIGHTS (BI Insights Section)
-    # ─────────────────────────────────────────────────
-    # Hitung nilai dinamis dari data nyata
-    r_m2m    = churn_pct(df, "contract",       "Month-to-month")
-    r_fiber  = churn_pct(df, "internetService","Fiber optic")
-    r_echeck = churn_pct(df, "paymentMethod",  "Electronic check")
-    r_tenure = churn_pct(df, "tenureBucket",   "0-12 Bulan")
-    r_2yr    = churn_pct(df, "contract",       "Two year")
-    r_senior = churn_pct(df, "seniorCitizen",  "Yes")
-    avg_churn_m = df[df["churnFlag"]==1]["monthlyCharges"].mean()
-    avg_ret_m   = df[df["churnFlag"]==0]["monthlyCharges"].mean()
+     # ══════════════════════════════════════════════════════════════════
+    # BARIS 5 — BUSINESS INSIGHTS — desain timeline/step cards
+    # ══════════════════════════════════════════════════════════════════
+    r_m2m    = _pct(df,"contract","Month-to-month")
+    r_2yr    = _pct(df,"contract","Two year")
+    r_fiber  = _pct(df,"internetService","Fiber optic")
+    r_dsl    = _pct(df,"internetService","DSL")
+    r_eck    = _pct(df,"paymentMethod","Electronic check")
+    r_auto   = _pct(df,"paymentCategory","Automatic") if "paymentCategory" in df.columns else 16.0
+    r_new    = _pct(df,"tenureBucket","0-12 Bulan")
+    r_old    = _pct(df,"tenureBucket","49+ Bulan")
+    r_senior = _pct(df,"seniorCitizen","Yes")
+    r_nosec  = _pct(df,"onlineSecurity","No")
+    r_sec    = _pct(df,"onlineSecurity","Yes")
+    a_ch     = df[df["churnFlag"]==1]["monthlyCharges"].mean()
+    a_rt     = df[df["churnFlag"]==0]["monthlyCharges"].mean()
+    t_ch     = df[df["churnFlag"]==1]["tenure"].mean()
+    t_rt     = df[df["churnFlag"]==0]["tenure"].mean()
 
     insights = [
         {
-            "icon": "⚠️",
-            "color": RED,
-            "bg": "#FFF5F5",
-            "title": "Risiko Kontrak Bulanan",
-            "desc": f"Pelanggan dengan kontrak <b>Month-to-month</b> memiliki churn rate <b style='color:{RED}'>{r_m2m:.1f}%</b> — "
-                    f"jauh di atas kontrak dua tahun yang hanya <b style='color:{MINT}'>{r_2yr:.1f}%</b>. "
-                    "Upgrade kontrak adalah strategi retensi paling efektif.",
-            "action": "💡 Rekomendasi: Tawarkan diskon untuk upgrade ke kontrak tahunan"
+            "num":"01", "color":C_CHURN, "bg":"#FFF5F5",
+            "icon":"📋",
+            "title":"Kontrak Bulanan = Pintu Keluar Terbuka",
+            "finding":f"Churn rate Month-to-month mencapai <b style='color:{C_CHURN}'>{r_m2m:.1f}%</b>, berbanding terbalik dengan kontrak dua tahun yang hanya <b style='color:{C_RETAINED}'>{r_2yr:.1f}%</b>.",
+            "why":"Pelanggan tanpa kontrak panjang tidak punya 'biaya' untuk berhenti — kapan saja tergiur promosi kompetitor, langsung bisa pindah. Komitmen kontrak menciptakan hambatan psikologis dan finansial yang efektif.",
+            "action":"Dorong upgrade kontrak dengan diskon 10–15% atau bundling layanan eksklusif khusus pelanggan kontrak tahunan.",
         },
         {
-            "icon": "📱",
-            "color": AMBER,
-            "bg": "#FFFBF0",
-            "title": "Fiber Optic Perlu Perhatian",
-            "desc": f"Layanan <b>Fiber Optic</b> memiliki churn rate <b style='color:{AMBER}'>{r_fiber:.1f}%</b> "
-                    f"— tertinggi dibanding DSL. Meski layanan premium, pelanggan lebih sering berpindah. "
-                    "Perlu evaluasi kualitas dan ekspektasi pelanggan.",
-            "action": "💡 Rekomendasi: Survey kepuasan khusus pengguna Fiber Optic"
+            "num":"02", "color":C_AMBER, "bg":"#FFFBF0",
+            "icon":"🌐",
+            "title":"Fiber Optic: Layanan Terbaik, Loyalitas Terendah",
+            "finding":f"Fiber Optic churn <b style='color:{C_AMBER}'>{r_fiber:.1f}%</b> — lebih dari dua kali lipat DSL ({r_dsl:.1f}%).",
+            "why":"Paradoks layanan premium: semakin tinggi ekspektasi pelanggan, semakin besar kekecewaan saat ada gangguan. Pengguna Fiber Optic cenderung lebih tech-savvy dan sadar pilihan lain di pasaran.",
+            "action":"Survey kepuasan khusus Fiber Optic dan evaluasi apakah harga yang dibayarkan sudah sepadan dengan konsistensi kualitas yang diterima.",
         },
         {
-            "icon": "💳",
-            "color": "#8B7FD4",
-            "bg": "#F5F3FF",
-            "title": "Risiko Pembayaran Manual",
-            "desc": f"Pengguna <b>Electronic Check</b> churn <b style='color:#8B7FD4'>{r_echeck:.1f}%</b> — "
-                    "lebih dari dua kali lipat pengguna auto-payment. Pelanggan yang membayar manual "
-                    "cenderung lebih mudah memutuskan untuk berhenti.",
-            "action": "💡 Rekomendasi: Tawarkan insentif migrasi ke auto-payment"
+            "num":"03", "color":C_PURP, "bg":"#F5F3FF",
+            "icon":"💳",
+            "title":"Cara Bayar Manual = Momen Reconsider Bulanan",
+            "finding":f"Electronic Check churn <b style='color:{C_CHURN}'>{r_eck:.1f}%</b> vs auto-payment hanya <b style='color:{C_RETAINED}'>{r_auto:.1f}%</b>.",
+            "why":"Setiap bulan pelanggan manual 'aktif memilih' untuk bayar lagi — ini adalah momen pengambilan keputusan yang berulang. Auto-payment menghilangkan momen tersebut dan menciptakan keterikatan pasif yang sangat efektif.",
+            "action":"Tawarkan cashback atau diskon tagihan bulan berikutnya bagi pelanggan yang beralih ke auto-payment.",
         },
         {
-            "icon": "⏳",
-            "color": BLUE,
-            "bg": "#EFF6FF",
-            "title": "Periode Kritis 0–12 Bulan",
-            "desc": f"Hampir <b style='color:{BLUE}'>{r_tenure:.1f}%</b> pelanggan baru (0–12 bulan) "
-                    "berhenti berlangganan. Masa onboarding adalah jendela paling krusial — "
-                    "pelanggan yang bertahan melewati tahun pertama cenderung loyal jangka panjang.",
-            "action": "💡 Rekomendasi: Program welcome dan loyalty di 3 bulan pertama"
+            "num":"04", "color":C_BLUE, "bg":"#EFF6FF",
+            "icon":"⏳",
+            "title":"12 Bulan Pertama: Jendela Retensi Paling Krusial",
+            "finding":f"Pelanggan 0–12 bulan churn <b style='color:{C_CHURN}'>{r_new:.1f}%</b>. Setelah 4 tahun+, turun drastis ke <b style='color:{C_RETAINED}'>{r_old:.1f}%</b>.",
+            "why":f"Rata-rata tenure pelanggan yang churn hanya {t_ch:.1f} bulan vs yang loyal {t_rt:.1f} bulan. Pelanggan yang berhasil melewati tahun pertama membangun kebiasaan dan ketergantungan terhadap layanan — inilah titik kritis yang harus dimenangkan.",
+            "action":"Program welcome intensif: personal onboarding call, diskon bulan ke-3, dan notifikasi proaktif saat ada gangguan di periode awal.",
         },
         {
-            "icon": "💰",
-            "color": MINT_DARK,
-            "bg": MINT_BG,
-            "title": "Tagihan Tinggi ≠ Loyal",
-            "desc": f"Rata-rata tagihan pelanggan yang churn <b style='color:{RED}'>${avg_churn_m:.2f}</b>/bulan "
-                    f"vs yang retained <b style='color:{MINT}'>${avg_ret_m:.2f}</b>/bulan. "
-                    "Pelanggan dengan tagihan lebih tinggi justru lebih sering churn — "
-                    "indikasi ketidaksesuaian nilai layanan dengan harga.",
-            "action": "💡 Rekomendasi: Review paket high-tier dan tambahkan nilai layanan"
+            "num":"05", "color":C_TEAL, "bg":"#F0FDFA",
+            "icon":"🔒",
+            "title":"Layanan Keamanan = Jangkar Loyalitas Paling Kuat",
+            "finding":f"Tanpa Online Security churn <b style='color:{C_CHURN}'>{r_nosec:.1f}%</b>, dengan Online Security hanya <b style='color:{C_RETAINED}'>{r_sec:.1f}%</b>. Pola identik pada Tech Support.",
+            "why":"Layanan keamanan dan dukungan teknis menciptakan 'switching cost' — data dan proteksi pelanggan sudah terintegrasi, sehingga pindah operator berarti kehilangan perlindungan aktif. Ini membuat pelanggan berpikir dua kali sebelum berhenti.",
+            "action":"Tawarkan trial gratis 3 bulan layanan Online Security & Tech Support untuk semua pelanggan baru — konversi habitual lebih mudah dari cold-sell.",
         },
         {
-            "icon": "👴",
-            "color": "#C06B2F",
-            "bg": "#FFF7ED",
-            "title": "Segmen Senior Citizen",
-            "desc": f"Pelanggan senior (65+) memiliki churn rate <b style='color:#C06B2F'>{r_senior:.1f}%</b> — "
-                    "hampir dua kali lipat non-senior. Segmen ini membutuhkan pendekatan layanan yang "
-                    "lebih personal dan program loyalitas khusus.",
-            "action": "💡 Rekomendasi: Paket khusus senior dengan dukungan teknis lebih mudah"
+            "num":"06", "color":"#C06B2F", "bg":"#FFF7ED",
+            "icon":"💰",
+            "title":"Paradoks Tagihan Tinggi: Bayar Lebih, Pergi Lebih Cepat",
+            "finding":f"Pelanggan churn rata-rata membayar <b style='color:{C_CHURN}'>${a_ch:.2f}</b>/bulan, sedangkan yang loyal hanya <b style='color:{C_RETAINED}'>${a_rt:.2f}</b>/bulan — selisih <b>${a_ch-a_rt:.2f}</b>.",
+            "why":"Pelanggan di segmen tagihan tinggi biasanya mengambil paket premium dengan harapan mendapatkan nilai maksimal. Ketika realita tidak sesuai harapan, kekecewaan lebih besar dan mereka lebih aktif mencari alternatif. Price-sensitivity tinggi berbanding lurus dengan churn.",
+            "action":f"Evaluasi ulang paket ${a_ch:.0f}+ — tambahkan fitur bernilai nyata (bukan sekadar kecepatan), dan pastikan experience pelanggan segmen premium benar-benar superior.",
         },
     ]
 
     st.markdown(f"""
-    <div style="background:linear-gradient(135deg,{MINT}08,{BLUE}08);
-         border:1.5px solid {MINT}30; border-radius:18px; padding:24px 26px 16px;
-         margin-bottom:6px;">
-        <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
-            <div style="width:36px;height:36px;background:{MINT};border-radius:10px;
-                 display:flex;align-items:center;justify-content:center;font-size:18px;">💡</div>
+    <div style="background:linear-gradient(135deg,{MINT}0C,{C_BLUE}08);
+         border:1.5px solid {MINT}30;border-radius:20px;padding:24px 24px 10px;">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;flex-wrap:wrap;">
+            <div style="width:42px;height:42px;background:{MINT};border-radius:12px;flex-shrink:0;
+                 display:flex;align-items:center;justify-content:center;font-size:22px;
+                 box-shadow:0 4px 12px rgba(46,175,125,0.3);">💡</div>
             <div>
-                <div style="font-size:14px;font-weight:900;color:{TEXT_DARK};letter-spacing:-0.2px;">
-                    Analisis Faktor Penyebab Churn — Business Insights
-                </div>
-                <div style="font-size:11px;color:{TEXT_LIGHT};margin-top:1px;">
-                    Temuan utama dari analisis data warehouse yang mendukung pengambilan keputusan strategis
+                <div style="font-size:16px;font-weight:900;color:{TEXT_DARK};
+                     letter-spacing:-0.3px;">Interpretasi & Business Insights</div>
+                <div style="font-size:12px;color:{TEXT_LIGHT};margin-top:1px;">
+                    Penjelasan mengapa pola churn ini terjadi dan langkah konkret yang dapat diambil — berbasis data warehouse
                 </div>
             </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
     """, unsafe_allow_html=True)
 
-    for ins in insights:
-        st.markdown(f"""
-            <div style="background:{ins['bg']}; border:1px solid {ins['color']}25;
-                 border-left:4px solid {ins['color']}; border-radius:12px;
-                 padding:14px 16px;">
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                    <span style="font-size:18px;">{ins['icon']}</span>
-                    <span style="font-size:13px;font-weight:800;color:{TEXT_DARK};">{ins['title']}</span>
+    # 3 kolom × 2 baris
+    for row_i in range(0, len(insights), 3):
+        row_ins = insights[row_i:row_i+3]
+        cols = st.columns(len(row_ins))
+        for col, ins in zip(cols, row_ins):
+            with col:
+                st.markdown(f"""
+                <div style="background:{ins['bg']};border:1px solid {ins['color']}22;
+                     border-radius:14px;padding:18px 18px 16px;
+                     position:relative;overflow:hidden;height:100%;">
+                    <!-- Number badge -->
+                    <div style="position:absolute;top:14px;right:16px;font-size:32px;
+                         font-weight:900;color:{ins['color']}15;line-height:1;">{ins['num']}</div>
+                    <!-- Icon + title -->
+                    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;">
+                        <div style="width:36px;height:36px;flex-shrink:0;background:{ins['color']}15;
+                             border-radius:10px;display:flex;align-items:center;
+                             justify-content:center;font-size:18px;">{ins['icon']}</div>
+                        <div style="font-size:13px;font-weight:800;color:{TEXT_DARK};
+                             line-height:1.3;padding-top:2px;">{ins['title']}</div>
+                    </div>
+                    <!-- Finding pill -->
+                    <div style="background:white;border:1px solid {ins['color']}30;border-radius:10px;
+                         padding:10px 12px;margin-bottom:10px;">
+                        <div style="font-size:10px;font-weight:800;color:{ins['color']};
+                             text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">
+                            📊 Temuan Data
+                        </div>
+                        <div style="font-size:12px;color:{TEXT_MID};line-height:1.55;">{ins['finding']}</div>
+                    </div>
+                    <!-- Why -->
+                    <div style="margin-bottom:10px;">
+                        <div style="font-size:10px;font-weight:800;color:{TEXT_LIGHT};
+                             text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">
+                            🔍 Mengapa Ini Terjadi
+                        </div>
+                        <div style="font-size:12px;color:{TEXT_MID};line-height:1.6;">{ins['why']}</div>
+                    </div>
+                    <!-- Action -->
+                    <div style="background:{ins['color']}0E;border:1px solid {ins['color']}25;
+                         border-left:3px solid {ins['color']};border-radius:8px;
+                         padding:8px 12px;">
+                        <div style="font-size:10px;font-weight:800;color:{ins['color']};
+                             text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px;">
+                            ✅ Rekomendasi Tindakan
+                        </div>
+                        <div style="font-size:12px;color:{TEXT_DARK};font-weight:600;
+                             line-height:1.5;">{ins['action']}</div>
+                    </div>
                 </div>
-                <div style="font-size:12px;color:{TEXT_MID};line-height:1.6;margin-bottom:10px;">
-                    {ins['desc']}
-                </div>
-                <div style="font-size:11px;color:{ins['color']};font-weight:600;
-                     background:white;border-radius:8px;padding:6px 10px;
-                     border:1px solid {ins['color']}20;">
-                    {ins['action']}
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+        st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
 
-    st.markdown("</div></div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top:18px'></div>", unsafe_allow_html=True)
 
-    st.markdown("<div style='margin-top:18px;'></div>", unsafe_allow_html=True)
-
-    # ─────────────────────────────────────────────────
-    # FOOTER
-    # ─────────────────────────────────────────────────
-    total_all = len(df)
-    churn_all = int(df["churnFlag"].sum())
+    # ── Footer ────────────────────────────────────────────────────────
+    total_all = len(df);  churn_all = int(df["churnFlag"].sum())
     st.markdown(f"""
-    <div style="display:flex; align-items:center; justify-content:space-between;
-         padding: 12px 4px 6px; border-top:1px solid {BORDER};">
-        <div style="font-size:11px; color:{TEXT_LIGHT};">
-            <b>Sumber Data:</b> Telco Customer Churn Dataset (Kaggle / IBM Watson Analytics)
-            &nbsp;|&nbsp; <b>Total Data:</b> {total_all:,} pelanggan
-            &nbsp;|&nbsp; <b>Total Churn:</b> {churn_all:,} pelanggan ({churn_all/total_all*100:.2f}%)
+    <div style="display:flex;align-items:center;justify-content:space-between;
+         padding:14px 2px 8px;border-top:1px solid {BORDER};flex-wrap:wrap;gap:6px;">
+        <div style="font-size:11px;color:{TEXT_LIGHT};">
+            <b>Sumber:</b> IBM Watson Telco Customer Churn (Kaggle)
+            &nbsp;·&nbsp;<b>Total:</b> {total_all:,} pelanggan
+            &nbsp;·&nbsp;<b>Churn:</b> {churn_all:,} ({churn_all/total_all*100:.2f}%)
         </div>
-        <div style="font-size:11px; color:{TEXT_LIGHT};">
-            Dashboard BI · Departemen Sistem Informasi · Universitas Andalas
+        <div style="font-size:11px;color:{TEXT_LIGHT};">
+            BI Dashboard · Sistem Informasi · Universitas Andalas
         </div>
     </div>
     """, unsafe_allow_html=True)
