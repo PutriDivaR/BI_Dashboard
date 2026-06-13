@@ -7,7 +7,9 @@ DB_NAME = "bi_customer"
 MYSQL_URI = f"{MYSQL_BASE_URI}/{DB_NAME}"
 
 DB_DIR = Path(__file__).resolve().parent
-SQLITE_URI = f"sqlite:///{DB_DIR / 'bi_customer.db'}"
+# Format with forward slashes for SQLite URI safety across Windows/Linux/Mac
+SQLITE_DB_PATH = str(DB_DIR / 'bi_customer.db').replace('\\', '/')
+SQLITE_URI = f"sqlite:///{SQLITE_DB_PATH}"
 
 engine = None
 db_type = "SQLite (Fallback)"
