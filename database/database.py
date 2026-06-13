@@ -1,10 +1,13 @@
-import os
+from pathlib import Path
+
 from sqlalchemy import create_engine, text
 
 MYSQL_BASE_URI = "mysql+pymysql://root:@localhost"
 DB_NAME = "bi_customer"
 MYSQL_URI = f"{MYSQL_BASE_URI}/{DB_NAME}"
-SQLITE_URI = "sqlite:///d:/Project/customer_churn_bi/database/bi_customer.db"
+
+DB_DIR = Path(__file__).resolve().parent
+SQLITE_URI = f"sqlite:///{DB_DIR / 'bi_customer.db'}"
 
 engine = None
 db_type = "SQLite (Fallback)"
@@ -23,10 +26,9 @@ try:
         pass
     db_type = "MySQL"
     db_uri = MYSQL_URI
-except Exception as e:
+except Exception:
     # Jika MySQL offline, gunakan SQLite lokal di folder database/
-    db_dir = "d:/Project/customer_churn_bi/database"
-    os.makedirs(db_dir, exist_ok=True)
+    DB_DIR.mkdir(parents=True, exist_ok=True)
     engine = create_engine(SQLITE_URI)
     db_type = "SQLite (Fallback)"
     db_uri = SQLITE_URI

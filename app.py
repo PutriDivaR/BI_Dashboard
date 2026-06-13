@@ -4,7 +4,11 @@ from streamlit_option_menu import option_menu
 from database.database import get_db_status
 
 # Import modular pages from views directory
+import importlib
 from views import page_dashboard, page_customer, page_etl
+importlib.reload(page_dashboard)
+importlib.reload(page_customer)
+importlib.reload(page_etl)
 
 # ==================================================
 # PAGE CONFIG
