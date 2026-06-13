@@ -13,6 +13,7 @@ import streamlit as st  # type: ignore
 
 from utils_bi import (
     MINT, MINT_SOFT, MINT_DARK, RED, AMBER, BLUE, PURP,
+    TEAL, ROSE,
     C_CHURN, C_RETAINED, C_AMBER, C_BLUE, C_PURP, C_TEAL, C_ROSE,
     TEXT_DARK, TEXT_MID, TEXT_LIGHT, BG_CARD, BORDER, MINT_BG, MINT_MID,
     theme_fig, page_header, section_title, card_open, card_close, card_header,
@@ -44,6 +45,22 @@ def bar_color_by_val(values, thresholds=(40, 20)):
         RED if v >= thresholds[0] else AMBER if v >= thresholds[1] else MINT
         for v in values
     ]
+
+
+def distinct_colors(values, palette=None):
+    """Assign a distinct, high-contrast color per unique value.
+
+    The highest values get the first colors in the palette (more alarming colors),
+    next highest get the next color, etc. This makes bar-by-bar comparison easier.
+    """
+    vals = list(values)
+    if palette is None:
+        palette = [RED, AMBER, BLUE, PURP, TEAL, ROSE, MINT, MINT_SOFT]
+
+    # Build mapping from unique value -> color ordered by value desc (largest -> first color)
+    uniq = sorted({v for v in vals if v == v}, reverse=True)  # remove NaN
+    color_map = {v: palette[i % len(palette)] for i, v in enumerate(uniq)}
+    return [color_map.get(v, MINT) for v in vals]
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -116,13 +133,36 @@ def render():
 
     with btn_col:
         st.markdown("<div style='margin-top:0px;'></div>", unsafe_allow_html=True)
-        if st.button("↺ Reset Filter", key="reset_filter"):
-            st.rerun()
+        def _reset_filters():
+            # ensure keys exist and are set to defaults
+            st.session_state['dash_periode']  = 'All'
+            st.session_state['dash_contract'] = 'All'
+            st.session_state['dash_inet']     = 'All'
+            # use experimental_rerun to re-execute with updated state
+            try:
+                st.experimental_rerun()
+            except Exception:
+                # fallback to plain rerun
+                st.rerun()
+
+        st.button("↺ Reset Filter", key="reset_filter", on_click=_reset_filters)
 
     # Apply filters
-    fdf = df.copy()
-    if sel_contract != "All": fdf = fdf[fdf["contract"]       == sel_contract]
-    if sel_internet != "All": fdf = fdf[fdf["internetService"] == sel_internet]
+    # create monthly segment column (same logic as build_trend_from_real) so 'Periode' selection can filter
+    months = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"]
+    df2 = df.copy()
+    if 'tenure' in df2.columns:
+        df2['month_segment'] = pd.cut(df2['tenure'], bins=12, labels=months)
+    else:
+        df2['month_segment'] = None
+
+    fdf = df2.copy()
+    if sel_periode != "All":
+        fdf = fdf[fdf['month_segment'] == sel_periode]
+    if sel_contract != "All":
+        fdf = fdf[fdf["contract"] == sel_contract]
+    if sel_internet != "All":
+        fdf = fdf[fdf["internetService"] == sel_internet]
 
     st.markdown("<div style='margin-top:4px;'></div>", unsafe_allow_html=True)
 
@@ -193,7 +233,7 @@ def render():
             go.Bar(
                 x=trend["Bulan"], y=trend["Jumlah Churn"],
                 name="Churn Customer",
-                marker_color=RED,
+                marker_color=distinct_colors(trend["Jumlah Churn"].round(0)),
                 marker_opacity=0.85,
                 marker_line_width=0,
             ),
@@ -330,7 +370,8 @@ def render():
         d = fdf.groupby("contract")["churnFlag"].mean().reset_index()
         d["pct"] = d["churnFlag"] * 100
         d = d.sort_values("pct", ascending=False)
-        colors = bar_color_by_val(d["pct"])
+        # use distinct, high-contrast colors per bar so differences are easy to spot
+        colors = distinct_colors(d["pct"].round(2))
 
         fig = go.Figure(go.Bar(
             x=d["contract"], y=d["pct"],
@@ -365,7 +406,8 @@ def render():
         d = fdf.groupby("internetService")["churnFlag"].mean().reset_index()
         d["pct"] = d["churnFlag"] * 100
         d = d.sort_values("pct", ascending=False)
-        colors = bar_color_by_val(d["pct"])
+        # assign distinct colors per internet service
+        colors = distinct_colors(d["pct"].round(2))
 
         fig = go.Figure(go.Bar(
             x=d["internetService"], y=d["pct"],
@@ -400,7 +442,8 @@ def render():
         d = fdf.groupby("paymentMethod")["churnFlag"].mean().reset_index()
         d["pct"] = d["churnFlag"] * 100
         d = d.sort_values("pct", ascending=False)
-        colors = bar_color_by_val(d["pct"])
+        # horizontal bars: use distinct contrasting colors
+        colors = distinct_colors(d["pct"].round(2))
 
         fig = go.Figure(go.Bar(
             y=d["paymentMethod"], x=d["pct"],
@@ -439,11 +482,12 @@ def render():
         d["pct"] = d["churnFlag"] * 100
         d["ord"] = d["tenureBucket"].map(order_map)
         d = d.sort_values("ord")
-        colors = [RED, AMBER, MINT_SOFT, MINT]
+        # tenure buckets: keep the designed sequential palette but ensure length matches
+        colors = [RED, AMBER, MINT_SOFT, MINT][:len(d)]
 
         fig = go.Figure(go.Bar(
             x=d["tenureBucket"], y=d["pct"],
-            marker_color=colors[:len(d)], marker_line_width=0,
+            marker_color=colors, marker_line_width=0,
             text=[f"{v:.2f}%" for v in d["pct"]],
             textposition="outside", textfont=dict(size=11, color=TEXT_DARK),
         ))
@@ -481,6 +525,7 @@ def render():
         d = fdf.groupby("seniorCitizen")["churnFlag"].mean().reset_index()
         d["pct"] = d["churnFlag"] * 100
         d["label"] = d["seniorCitizen"].map({"Yes": "Senior Citizen (1)", "No": "Non Senior (0)"}).fillna(d["seniorCitizen"])
+        # make senior citizen bars clearly contrasting
         colors = [RED if v >= 35 else MINT for v in d["pct"]]
 
         fig = go.Figure(go.Bar(
@@ -558,7 +603,8 @@ def render():
         ]
         risks_df = pd.DataFrame(risks, columns=["Faktor", "Churn Rate (%)"])
         risks_df = risks_df.sort_values("Churn Rate (%)", ascending=True)
-        colors_r = bar_color_by_val(risks_df["Churn Rate (%)"])
+        # highlight top risk factors with distinct colors
+        colors_r = distinct_colors(risks_df["Churn Rate (%)"].round(2))
 
         fig = go.Figure(go.Bar(
             y=risks_df["Faktor"], x=risks_df["Churn Rate (%)"],
@@ -721,7 +767,8 @@ def render():
                 demo_data.append({"Kategori": row["label"], "Churn Rate (%)": row["pct"]})
 
         df_demo = pd.DataFrame(demo_data)
-        colors_d = bar_color_by_val(df_demo["Churn Rate (%)"], thresholds=(35, 20))
+        # per-category contrasting colors (strong red/blue/green order)
+        colors_d = distinct_colors(df_demo["Churn Rate (%)"].round(2), palette=[RED, BLUE, MINT, AMBER, PURP])
 
         fig = go.Figure(go.Bar(
             x=df_demo["Kategori"], y=df_demo["Churn Rate (%)"],
