@@ -35,7 +35,7 @@ def churn_pct(df: pd.DataFrame, col: str, val: str) -> float:
     sub = df[df[col] == val]
     return (sub["churnFlag"].sum() / len(sub) * 100) if len(sub) else 0.0
 
-# Backwards-compatible alias used elsewhere in the file
+
 _pct = churn_pct
 
 
@@ -105,7 +105,7 @@ def render():
     df = load_bi_data()
 
     # ─────────────────────────────────────────────────
-    # FILTER BAR — persis seperti referensi gambar
+    # FILTER BAR 
     # ─────────────────────────────────────────────────
     st.markdown(f"""
     <div style="background:{BG_CARD}; border:1px solid {BORDER}; border-radius:14px;
@@ -167,7 +167,7 @@ def render():
     st.markdown("<div style='margin-top:4px;'></div>", unsafe_allow_html=True)
 
     # ─────────────────────────────────────────────────
-    # KPI CARDS — 5 card besar bergaya seperti gambar
+    # KPI CARDS —
     # ─────────────────────────────────────────────────
     total    = len(fdf)
     churned  = int(fdf["churnFlag"].sum())
