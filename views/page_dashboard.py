@@ -3,6 +3,8 @@ page_dashboard.py
 Halaman utama Dashboard BI – Customer Churn Analysis
 Semua data dari database (data warehouse star schema).
 """
+import io
+import datetime
 import random
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
@@ -10,6 +12,15 @@ import plotly.express as px  # type: ignore
 import plotly.graph_objects as go  # type: ignore
 from plotly.subplots import make_subplots  # type: ignore
 import streamlit as st  # type: ignore
+
+from reportlab.lib import colors as rl_colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm
+from reportlab.platypus import (
+    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
 from utils_bi import (
     MINT, MINT_SOFT, MINT_DARK, RED, AMBER, BLUE, PURP,
@@ -90,11 +101,215 @@ def build_trend_from_real(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# MAIN RENDER
+# PDF REPORT GENERATOR — Laporan ke Atasan
 # ─────────────────────────────────────────────────────────────────────
-def render():
+def build_pdf_report(df: pd.DataFrame, fdf: pd.DataFrame, filters: dict) -> bytes:
+    """Generate a polished executive PDF report (mint theme) from the
+    currently-loaded & filtered BI data. Returns PDF bytes."""
 
-    # ── Page header (use shared green banner like other pages)
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=1.8*cm, rightMargin=1.8*cm,
+        topMargin=1.6*cm, bottomMargin=1.6*cm,
+        title="Laporan Customer Churn BI",
+    )
+
+    MINT_HEX  = "#2EAF7D"
+    DARK_HEX  = "#1A3026"
+    LIGHT_HEX = "#6C7A72"
+    RED_HEX   = "#E76F51"
+    BG_HEX    = "#E8F8F2"
+
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle("TitleMint", parent=styles["Title"],
+        fontSize=20, textColor=rl_colors.HexColor(MINT_HEX), spaceAfter=2,
+        alignment=TA_LEFT, fontName="Helvetica-Bold"))
+    styles.add(ParagraphStyle("SubMint", parent=styles["Normal"],
+        fontSize=10, textColor=rl_colors.HexColor(LIGHT_HEX), spaceAfter=14))
+    styles.add(ParagraphStyle("SectionHead", parent=styles["Heading2"],
+        fontSize=13, textColor=rl_colors.HexColor(DARK_HEX),
+        spaceBefore=14, spaceAfter=6, fontName="Helvetica-Bold"))
+    styles.add(ParagraphStyle("Body", parent=styles["Normal"],
+        fontSize=9.5, textColor=rl_colors.HexColor(DARK_HEX), leading=14))
+    styles.add(ParagraphStyle("BodyMid", parent=styles["Normal"],
+        fontSize=9, textColor=rl_colors.HexColor(LIGHT_HEX), leading=13))
+    styles.add(ParagraphStyle("InsightTitle", parent=styles["Normal"],
+        fontSize=10, textColor=rl_colors.HexColor(DARK_HEX),
+        fontName="Helvetica-Bold", spaceAfter=2))
+
+    elems = []
+
+    # ── Header ──────────────────────────────────────────────────────
+    now = datetime.datetime.now().strftime("%d %B %Y, %H:%M")
+    elems.append(Paragraph("📊 Laporan Customer Churn — Business Intelligence", styles["TitleMint"]))
+    elems.append(Paragraph(
+        f"Dibuat otomatis pada {now}  ·  Sumber: IBM Watson Telco Customer Churn Dataset (Kaggle)",
+        styles["SubMint"]))
+    elems.append(HRFlowable(width="100%", thickness=1.2,
+        color=rl_colors.HexColor(MINT_HEX), spaceAfter=10))
+
+    # ── Filter info ─────────────────────────────────────────────────
+    f_periode  = filters.get("periode", "All")
+    f_contract = filters.get("contract", "All")
+    f_internet = filters.get("internet", "All")
+    elems.append(Paragraph(
+        f"<b>Filter aktif:</b> Periode = {f_periode} &nbsp;|&nbsp; "
+        f"Contract = {f_contract} &nbsp;|&nbsp; Internet Service = {f_internet}",
+        styles["BodyMid"]))
+    elems.append(Spacer(1, 8))
+
+    # ── KPI Summary ─────────────────────────────────────────────────
+    total    = len(fdf)
+    churned  = int(fdf["churnFlag"].sum())
+    retained = total - churned
+    churn_rt = churned / total * 100 if total else 0.0
+    ret_rt   = 100 - churn_rt
+    avg_m    = fdf["monthlyCharges"].mean() if total else 0.0
+
+    elems.append(Paragraph("Ringkasan KPI Utama", styles["SectionHead"]))
+    kpi_data = [
+        ["Total Customer", "Total Churn", "Churn Rate", "Retention Rate", "Avg Monthly Charges"],
+        [f"{total:,}", f"{churned:,}", f"{churn_rt:.2f}%", f"{ret_rt:.2f}%", f"${avg_m:,.2f}"],
+    ]
+    kpi_table = Table(kpi_data, colWidths=[3.4*cm]*5, hAlign="LEFT")
+    kpi_table.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), rl_colors.HexColor(MINT_HEX)),
+        ("TEXTCOLOR",  (0,0), (-1,0), rl_colors.white),
+        ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+        ("FONTSIZE",   (0,0), (-1,-1), 8.5),
+        ("BACKGROUND", (0,1), (-1,1), rl_colors.HexColor(BG_HEX)),
+        ("TEXTCOLOR",  (0,1), (-1,1), rl_colors.HexColor(DARK_HEX)),
+        ("FONTNAME",   (0,1), (-1,1), "Helvetica-Bold"),
+        ("FONTSIZE",   (0,1), (-1,1), 12),
+        ("ALIGN",      (0,0), (-1,-1), "CENTER"),
+        ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING", (0,0), (-1,-1), 7),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 7),
+        ("GRID",       (0,0), (-1,-1), 0.5, rl_colors.HexColor("#E2EFE9")),
+        ("BOX",        (0,0), (-1,-1), 0.8, rl_colors.HexColor(MINT_HEX)),
+    ]))
+    elems.append(kpi_table)
+    elems.append(Spacer(1, 14))
+
+    # ── Churn by Segment Tables ───────────────────────────────────────
+    def seg_table(title, group_col, label_map=None):
+        d = fdf.groupby(group_col)["churnFlag"].agg(["count", "sum", "mean"]).reset_index()
+        d.columns = [group_col, "Total", "Churn", "Rate"]
+        d["Rate"] = (d["Rate"] * 100).round(2)
+        d = d.sort_values("Rate", ascending=False)
+        if label_map:
+            d[group_col] = d[group_col].map(label_map).fillna(d[group_col])
+
+        elems.append(Paragraph(title, styles["SectionHead"]))
+        rows = [["Kategori", "Total Pelanggan", "Jumlah Churn", "Churn Rate"]]
+        for _, r in d.iterrows():
+            rows.append([str(r[group_col]), f"{int(r['Total']):,}",
+                          f"{int(r['Churn']):,}", f"{r['Rate']:.2f}%"])
+        t = Table(rows, colWidths=[6.5*cm, 3.3*cm, 3.3*cm, 3.3*cm], hAlign="LEFT")
+        style_cmds = [
+            ("BACKGROUND", (0,0), (-1,0), rl_colors.HexColor(DARK_HEX)),
+            ("TEXTCOLOR",  (0,0), (-1,0), rl_colors.white),
+            ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTSIZE",   (0,0), (-1,-1), 9),
+            ("ALIGN",      (1,0), (-1,-1), "CENTER"),
+            ("ALIGN",      (0,0), (0,-1), "LEFT"),
+            ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
+            ("TOPPADDING", (0,0), (-1,-1), 5),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+            ("GRID",       (0,0), (-1,-1), 0.4, rl_colors.HexColor("#E2EFE9")),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1),
+                [rl_colors.white, rl_colors.HexColor("#F4FBF8")]),
+        ]
+        # highlight highest-risk row(s) in red text
+        for i, r in enumerate(d.itertuples(), start=1):
+            if r.Rate >= 35:
+                style_cmds.append(("TEXTCOLOR", (3,i), (3,i), rl_colors.HexColor(RED_HEX)))
+                style_cmds.append(("FONTNAME", (3,i), (3,i), "Helvetica-Bold"))
+        t.setStyle(TableStyle(style_cmds))
+        elems.append(t)
+        elems.append(Spacer(1, 10))
+
+    seg_table("Churn Rate berdasarkan Tipe Kontrak", "contract")
+    seg_table("Churn Rate berdasarkan Layanan Internet", "internetService")
+    seg_table("Churn Rate berdasarkan Metode Pembayaran", "paymentMethod")
+    seg_table("Churn Rate berdasarkan Kelompok Tenure (Lama Berlangganan)", "tenureBucket")
+
+    elems.append(Spacer(1, 4))
+
+    # ── Business Insights (text) ──────────────────────────────────────
+    elems.append(Paragraph("Interpretasi & Rekomendasi Bisnis", styles["SectionHead"]))
+
+    r_m2m    = _pct(df,"contract","Month-to-month")
+    r_2yr    = _pct(df,"contract","Two year")
+    r_fiber  = _pct(df,"internetService","Fiber optic")
+    r_dsl    = _pct(df,"internetService","DSL")
+    r_eck    = _pct(df,"paymentMethod","Electronic check")
+    r_auto   = _pct(df,"paymentCategory","Automatic") if "paymentCategory" in df.columns else 16.0
+    r_new    = _pct(df,"tenureBucket","0-12 Bulan")
+    r_old    = _pct(df,"tenureBucket","49+ Bulan")
+    r_senior = _pct(df,"seniorCitizen","Yes")
+    r_nosec  = _pct(df,"onlineSecurity","No")
+    r_sec    = _pct(df,"onlineSecurity","Yes")
+    a_ch     = df[df["churnFlag"]==1]["monthlyCharges"].mean()
+    a_rt     = df[df["churnFlag"]==0]["monthlyCharges"].mean()
+
+    insight_texts = [
+        ("1. Kontrak Bulanan = Pintu Keluar Terbuka",
+         f"Churn rate Month-to-month mencapai {r_m2m:.1f}%, jauh di atas kontrak dua tahun "
+         f"yang hanya {r_2yr:.1f}%. <b>Rekomendasi:</b> dorong upgrade kontrak dengan diskon "
+         "10–15% atau bundling layanan eksklusif khusus pelanggan kontrak tahunan."),
+        ("2. Fiber Optic Perlu Perhatian Khusus",
+         f"Fiber Optic churn {r_fiber:.1f}% — lebih dari dua kali lipat DSL ({r_dsl:.1f}%). "
+         "<b>Rekomendasi:</b> lakukan survey kepuasan khusus pengguna Fiber Optic dan evaluasi "
+         "kesesuaian harga dengan kualitas layanan."),
+        ("3. Metode Pembayaran Manual Berisiko",
+         f"Electronic Check churn {r_eck:.1f}% vs auto-payment hanya {r_auto:.1f}%. "
+         "<b>Rekomendasi:</b> tawarkan cashback/diskon bagi pelanggan yang beralih ke "
+         "auto-payment."),
+        ("4. Periode 0–12 Bulan adalah Masa Kritis",
+         f"Pelanggan baru (0–12 bulan) churn {r_new:.1f}%, sedangkan pelanggan 49+ bulan "
+         f"hanya {r_old:.1f}%. <b>Rekomendasi:</b> jalankan program onboarding intensif "
+         "(welcome call, diskon bulan ke-3, notifikasi proaktif)."),
+        ("5. Layanan Keamanan Meningkatkan Loyalitas",
+         f"Tanpa Online Security churn {r_nosec:.1f}%, dengan Online Security hanya "
+         f"{r_sec:.1f}%. <b>Rekomendasi:</b> tawarkan trial gratis 3 bulan Online Security "
+         "& Tech Support untuk pelanggan baru."),
+        ("6. Tagihan Tinggi Berkorelasi dengan Churn",
+         f"Pelanggan churn rata-rata membayar ${a_ch:.2f}/bulan vs pelanggan loyal "
+         f"${a_rt:.2f}/bulan (selisih ${a_ch-a_rt:.2f}). <b>Rekomendasi:</b> evaluasi ulang "
+         "paket premium agar nilai yang diberikan sepadan dengan harga."),
+        ("7. Segmen Senior Citizen Membutuhkan Pendekatan Berbeda",
+         f"Pelanggan senior (65+) churn {r_senior:.1f}% — signifikan lebih tinggi dari "
+         "rata-rata. <b>Rekomendasi:</b> sediakan paket dan dukungan layanan yang lebih "
+         "sederhana dan personal untuk segmen ini."),
+    ]
+
+    for title, body in insight_texts:
+        elems.append(Paragraph(title, styles["InsightTitle"]))
+        elems.append(Paragraph(body, styles["Body"]))
+        elems.append(Spacer(1, 6))
+
+    elems.append(Spacer(1, 6))
+    elems.append(HRFlowable(width="100%", thickness=0.8,
+        color=rl_colors.HexColor("#E2EFE9"), spaceAfter=6))
+    elems.append(Paragraph(
+        "Laporan ini dihasilkan otomatis oleh sistem Customer Churn BI berdasarkan data "
+        "warehouse (star schema). Angka dapat berubah sesuai filter yang dipilih saat laporan "
+        "diunduh.",
+        styles["BodyMid"]))
+    elems.append(Paragraph(
+        "Dashboard BI · Departemen Sistem Informasi · Universitas Andalas",
+        styles["BodyMid"]))
+
+    doc.build(elems)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+
+def render():
+    # ── Page header 
     page_header("📊", "Overview", "Ringkasan performa customer churn perusahaan telekomunikasi")
 
     if not check_db_ready():
@@ -115,7 +330,7 @@ def render():
     </div>
     """, unsafe_allow_html=True)
 
-    fc1, fc2, fc3, _, btn_col = st.columns([1.2, 1.2, 1.5, 0.3, 0.8])
+    fc1, fc2, fc3, _, btn_col1, btn_col2 = st.columns([1.2, 1.2, 1.5, 0.15, 0.85, 0.85])
     with fc1:
         periods = ["All"] + ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"]
         sel_periode = st.selectbox("Periode", periods, key="dash_periode", label_visibility="collapsed")
@@ -131,7 +346,7 @@ def render():
         sel_internet = st.selectbox("Internet Service", internets, key="dash_inet", label_visibility="collapsed")
         st.markdown("<div style='margin-top:-8px;font-size:10px;color:#8FA898;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;'>Internet Service</div>", unsafe_allow_html=True)
 
-    with btn_col:
+    with btn_col1:
         st.markdown("<div style='margin-top:0px;'></div>", unsafe_allow_html=True)
         def _reset_filters():
             # ensure keys exist and are set to defaults
@@ -145,7 +360,12 @@ def render():
                 # fallback to plain rerun
                 st.rerun()
 
-        st.button("↺ Reset Filter", key="reset_filter", on_click=_reset_filters)
+        st.button("↺ Reset Filter", key="reset_filter", on_click=_reset_filters, use_container_width=True)
+
+    with btn_col2:
+        st.markdown("<div style='margin-top:0px;'></div>", unsafe_allow_html=True)
+        
+        export_placeholder = st.empty()
 
     # Apply filters
     # create monthly segment column (same logic as build_trend_from_real) so 'Periode' selection can filter
@@ -163,6 +383,21 @@ def render():
         fdf = fdf[fdf["contract"] == sel_contract]
     if sel_internet != "All":
         fdf = fdf[fdf["internetService"] == sel_internet]
+
+    # ── Tombol Export PDF  ────────────────────
+    with export_placeholder:
+        pdf_bytes = build_pdf_report(
+            df, fdf,
+            filters={"periode": sel_periode, "contract": sel_contract, "internet": sel_internet}
+        )
+        st.download_button(
+            label="📄 Export PDF",
+            data=pdf_bytes,
+            file_name=f"laporan_churn_bi_{datetime.date.today().isoformat()}.pdf",
+            mime="application/pdf",
+            key="export_pdf_btn",
+            use_container_width=True,
+        )
 
     st.markdown("<div style='margin-top:4px;'></div>", unsafe_allow_html=True)
 

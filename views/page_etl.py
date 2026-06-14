@@ -1,4 +1,3 @@
-
 """page_etl.py – Halaman ETL & Data Quality Pipeline."""
 import os
 from typing import Any
@@ -171,6 +170,17 @@ def render():
     db_type, db_uri = get_db_status()
     is_ready = check_db_ready()
 
+    # ── Hitung fact_cnt sekali di sini agar bisa dipakai di seluruh halaman ──
+    try:
+        with engine.connect() as _conn:
+            _res = _conn.execute(text("SELECT COUNT(*) FROM fact_churn")).fetchone()
+            fact_cnt = _res[0] if _res is not None else 0
+    except Exception:
+        fact_cnt = 0
+
+    # Gunakan fact_cnt sebagai sumber kebenaran apakah DWH sudah terisi
+    dwh_has_data = fact_cnt > 0
+
     # ══════════════════════════════════════════════════════════════════════════
     # SECTION 1 – STATUS INFRASTRUKTUR
     # ══════════════════════════════════════════════════════════════════════════
@@ -191,15 +201,9 @@ def render():
 
     # DWH Status
     with s2:
-        try:
-            with engine.connect() as conn:
-                res = conn.execute(text("SELECT COUNT(*) FROM fact_churn")).fetchone()
-                fact_cnt = res[0] if res is not None else 0
-        except Exception:
-            fact_cnt = 0
-        wh_color = MINT if is_ready else RED
-        wh_icon  = "✅" if is_ready else "❌"
-        wh_label = "Ready & Populated" if is_ready else "Empty / Not Loaded"
+        wh_color = MINT if dwh_has_data else RED
+        wh_icon  = "✅" if dwh_has_data else "❌"
+        wh_label = "Ready & Populated" if dwh_has_data else "Empty / Not Loaded"
         st.markdown(f"""
         <div class="card" style="border-top:3px solid {wh_color};">
             <div style="font-size:11px;font-weight:700;text-transform:uppercase;
@@ -314,17 +318,31 @@ def render():
                 <h3>Jalankan Pipeline</h3>
             </div>""", unsafe_allow_html=True)
 
-        if not is_ready:
-            if st.button("▶  Jalankan ETL Pipeline Sekarang", key="run_etl_now"):
-                log_area = st.empty()
-                logs = []
+        # ── Tentukan label & key tombol sesuai kondisi ──────────────────────
+        if not dwh_has_data:
+            btn_label = "▶  Jalankan ETL Pipeline Sekarang"
+            btn_key   = "run_etl_now"
+            show_btn  = True
+        else:
+            # DWH sudah terisi – tampilkan info + toggle untuk re-run
+            st.info("✅ Data Warehouse sudah terisi. Anda tetap bisa menjalankan ulang ETL "
+                    "untuk me-refresh data dari awal.")
+            show_btn  = st.checkbox("🔄 Jalankan ulang ETL (akan menghapus & reload data)",
+                                    key="chk_force_rerun")
+            btn_label = "▶  Jalankan Ulang ETL Pipeline"
+            btn_key   = "run_etl_force"
 
-                def append_log(msg):
+        if show_btn:
+            if st.button(btn_label, key=btn_key, type="primary"):
+                log_area = st.empty()
+                logs: list[str] = []
+
+                def _append_log(msg: str) -> None:
                     logs.append(msg)
                     log_area.code("\n".join(logs), language="bash")
 
-                with st.spinner("Menjalankan ETL..."):
-                    success, message = run_etl(log_callback=append_log)
+                with st.spinner("Menjalankan ETL…"):
+                    success, message = run_etl(log_callback=_append_log)
 
                 if success:
                     st.success("✅ ETL Pipeline berhasil! Data Warehouse siap digunakan.")
@@ -334,42 +352,13 @@ def render():
                 else:
                     st.error(f"❌ ETL Gagal: {message}")
             else:
-                st.markdown(f"""
-                <div style="border:2px dashed {BORDER};border-radius:12px;
-                     padding:30px 20px;text-align:center;color:{TEXT_LIGHT};">
-                    <div style="font-size:32px;margin-bottom:8px;">▶️</div>
-                    <div style="font-size:13px;">Log eksekusi akan muncul di sini</div>
-                </div>""", unsafe_allow_html=True)
-        else:
-            st.info("Data Warehouse sudah terisi. ETL tidak diperlukan untuk melihat Dashboard.")
-            if os.getenv("ETL_ALLOW_FORCE", "0") == "1":
-                st.markdown(
-                    "<small style='color:#6C7A72'>Force-run enabled by environment variable.</small>",
-                    unsafe_allow_html=True)
-                if st.button("▶  Jalankan ETL Pipeline (FORCE)", key="run_etl_force"):
-                    log_area = st.empty()
-                    logs = []
-
-                    def append_log_f(msg):
-                        logs.append(msg)
-                        log_area.code("\n".join(logs), language="bash")
-
-                    with st.spinner("Menjalankan ETL (FORCE)..."):
-                        success, message = run_etl(log_callback=append_log_f)
-
-                    if success:
-                        st.success("✅ ETL Pipeline (FORCE) berhasil!")
-                        st.balloons()
-                        st.cache_data.clear()
-                        st.rerun()
-                    else:
-                        st.error(f"❌ ETL Gagal: {message}")
-            else:
-                st.markdown(
-                    f"<div style='padding:12px 0;color:{TEXT_MID};font-size:13px;'>"
-                    "Untuk refresh data, jalankan ETL dari CLI atau set "
-                    "<code>ETL_ALLOW_FORCE=1</code>.</div>",
-                    unsafe_allow_html=True)
+                if not dwh_has_data:
+                    st.markdown(f"""
+                    <div style="border:2px dashed {BORDER};border-radius:12px;
+                         padding:30px 20px;text-align:center;color:{TEXT_LIGHT};">
+                        <div style="font-size:32px;margin-bottom:8px;">▶️</div>
+                        <div style="font-size:13px;">Log eksekusi akan muncul di sini</div>
+                    </div>""", unsafe_allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -378,7 +367,7 @@ def render():
     # ══════════════════════════════════════════════════════════════════════════
     # SECTION 4 – DATA QUALITY (hanya tampil jika DWH terisi)
     # ══════════════════════════════════════════════════════════════════════════
-    if is_ready:
+    if dwh_has_data:
         section_title("🔬 Laporan Kualitas Data")
 
         dq = _get_dq_metrics()
